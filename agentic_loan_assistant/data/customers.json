@@ -1,0 +1,112 @@
+[
+  {
+    "id": "cust001",
+    "name": "Asha Menon",
+    "age": 29,
+    "city": "Thiruvananthapuram",
+    "credit_score": 745,
+    "pre_approved_limit": 150000,
+    "current_loans": 0,
+    "phone": "+919800000001",
+    "pan": "AAAAA0000A"
+  },
+  {
+    "id": "cust002",
+    "name": "Ravi Kumar",
+    "age": 35,
+    "city": "Bengaluru",
+    "credit_score": 680,
+    "pre_approved_limit": 100000,
+    "current_loans": 40000,
+    "phone": "+919800000002",
+    "pan": "BBBBB0000B"
+  },
+  {
+    "id": "cust003",
+    "name": "Neha Patel",
+    "age": 31,
+    "city": "Ahmedabad",
+    "credit_score": 720,
+    "pre_approved_limit": 200000,
+    "current_loans": 50000,
+    "phone": "+919800000003",
+    "pan": "CCCCC0000C"
+  },
+  {
+    "id": "cust004",
+    "name": "S J Jithin",
+    "age": 23,
+    "city": "Trivandrum",
+    "credit_score": 770,
+    "pre_approved_limit": 250000,
+    "current_loans": 0,
+    "phone": "+919800000004",
+    "pan": "DDDDD0000D"
+  },
+  {
+    "id": "cust005",
+    "name": "Ankit Sharma",
+    "age": 42,
+    "city": "Delhi",
+    "credit_score": 695,
+    "pre_approved_limit": 120000,
+    "current_loans": 60000,
+    "phone": "+919800000005",
+    "pan": "EEEEE0000E"
+  },
+  {
+    "id": "cust006",
+    "name": "Priya Rao",
+    "age": 27,
+    "city": "Hyderabad",
+    "credit_score": 705,
+    "pre_approved_limit": 90000,
+    "current_loans": 0,
+    "phone": "+919800000006",
+    "pan": "FFFFF0000F"
+  },
+  {
+    "id": "cust007",
+    "name": "Mohan Das",
+    "age": 39,
+    "city": "Kolkata",
+    "credit_score": 650,
+    "pre_approved_limit": 80000,
+    "current_loans": 20000,
+    "phone": "+919800000007",
+    "pan": "GGGGG0000G"
+  },
+  {
+    "id": "cust008",
+    "name": "Sunita Gupta",
+    "age": 45,
+    "city": "Mumbai",
+    "credit_score": 730,
+    "pre_approved_limit": 180000,
+    "current_loans": 0,
+    "phone": "+919800000008",
+    "pan": "HHHHH0000H"
+  },
+  {
+    "id": "cust009",
+    "name": "Vikram Singh",
+    "age": 33,
+    "city": "Chandigarh",
+    "credit_score": 760,
+    "pre_approved_limit": 300000,
+    "current_loans": 100000,
+    "phone": "+919800000009",
+    "pan": "IIIII0000I"
+  },
+  {
+    "id": "cust010",
+    "name": "Rhea Bose",
+    "age": 30,
+    "city": "Kolkata",
+    "credit_score": 710,
+    "pre_approved_limit": 110000,
+    "current_loans": 25000,
+    "phone": "+919800000010",
+    "pan": "JJJJJ0000J"
+  }
+]
