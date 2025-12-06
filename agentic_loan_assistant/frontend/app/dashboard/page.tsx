@@ -19,6 +19,7 @@ interface UserData {
   panNumber?: string;
   aadharNumber?: string;
   currentLoanAmount?: number;
+  totalLoanAmount?: number;
   monthlyEMI?: number;
   loanStatus?: string;
   sanctionLetterUrl?: string;
@@ -42,7 +43,7 @@ export default function DashboardPage() {
   }, [user, authLoading, router]);
 
   const loadUserData = async () => {
-    if (!user) return;
+    if (!user || !db) return;
     try {
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (userDoc.exists()) {
@@ -70,7 +71,7 @@ export default function DashboardPage() {
         kycCompletedAt: new Date().toISOString(),
       };
 
-      await setDoc(doc(db, 'users', user!.uid), updatedData, { merge: true });
+      await setDoc(doc(db!, 'users', user!.uid), updatedData, { merge: true });
 
       // Reload user data to reflect changes
       await loadUserData();
@@ -131,8 +132,8 @@ export default function DashboardPage() {
 
         {/* Stats */}
         <div className="stats-grid">
-          <div className="stat-card"><div className="stat-icon">💰</div><div><p>Loan Amount</p><h3>₹{userData?.currentLoanAmount ? userData.currentLoanAmount.toLocaleString('en-IN') : '0'}</h3></div></div>
-          <div className="stat-card"><div className="stat-icon">📊</div><div><p>Status</p><h3>{userData?.loanStatus || 'Inactive'}</h3></div></div>
+          <div className="stat-card"><div className="stat-icon">💰</div><div><p>Current Loan</p><h3>₹{userData?.currentLoanAmount ? userData.currentLoanAmount.toLocaleString('en-IN') : '0'}</h3></div></div>
+          <div className="stat-card"><div className="stat-icon">📊</div><div><p>Total Loans</p><h3>₹{userData?.totalLoanAmount ? userData.totalLoanAmount.toLocaleString('en-IN') : '0'}</h3></div></div>
           <div className="stat-card"><div className="stat-icon">💳</div><div><p>Monthly EMI</p><h3>₹{userData?.monthlyEMI ? userData.monthlyEMI.toLocaleString('en-IN') : '0'}</h3></div></div>
           <div className="stat-card"><div className="stat-icon">✅</div><div><p>KYC Status</p><h3>{userData?.kycStatus || 'Pending'}</h3></div></div>
         </div>
@@ -147,9 +148,9 @@ export default function DashboardPage() {
           <div className="glass-card">
             <h2>Quick Actions</h2>
             <div className="actions-grid">
-              <Link href={`/?customerId=${userData?.customerId || ''}`} className="action-btn"><span>💬</span><span>Apply Loan</span></Link>
+              <button onClick={() => router.push(`/?customerId=${userData?.customerId || ''}`)} className="action-btn"><span>💬</span><span>Apply Loan</span></button>
               {userData?.sanctionLetterUrl && (
-                <a href={`http://localhost:8000${userData.sanctionLetterUrl}`} target="_blank" className="action-btn"><span>📜</span><span>Sanction Letter</span></a>
+                <button onClick={() => window.open(`http://localhost:8000${userData.sanctionLetterUrl}`, '_blank')} className="action-btn"><span>📜</span><span>Sanction Letter</span></button>
               )}
               <button className="action-btn"><span>💰</span><span>Payment</span></button>
               <button className="action-btn"><span>📞</span><span>Support</span></button>

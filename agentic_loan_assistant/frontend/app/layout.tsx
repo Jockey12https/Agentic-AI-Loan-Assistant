@@ -1,7 +1,7 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter, Outfit } from 'next/font/google'
 import './globals.css'
-import { AuthProvider } from '../contexts/AuthContext'
+import { Providers } from './providers'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -18,7 +18,12 @@ const outfit = Outfit({
 export const metadata: Metadata = {
   title: 'LoanBot AI Assistant - Intelligent Loan Management',
   description: 'AI-powered loan assistant with voice and text interaction for seamless loan applications',
-  viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
   themeColor: '#667eea',
 }
 
@@ -30,9 +35,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${outfit.variable}`}>
       <body>
-        <AuthProvider>
+        <Providers>
           {children}
-        </AuthProvider>
+        </Providers>
       </body>
     </html>
   )

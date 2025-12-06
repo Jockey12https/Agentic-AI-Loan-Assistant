@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useRouter } from 'next/navigation';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import CreditScoreGauge from '../components/CreditScoreGauge';
@@ -21,6 +22,8 @@ interface Message {
 }
 
 export default function Home() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
   const [customerId, setCustomerId] = useState('cust004');
   const [messages, setMessages] = useState<Message[]>([]);
   const [textInput, setTextInput] = useState('');
@@ -38,7 +41,13 @@ export default function Home() {
   const [showUpload, setShowUpload] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const chatLogRef = useRef<HTMLDivElement>(null);
-  const { user } = useAuth();
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [user, loading, router]);
 
   // Read customer ID from URL parameter (from dashboard)
   useEffect(() => {
@@ -87,7 +96,11 @@ export default function Home() {
   // Fetch user data from Firebase
   useEffect(() => {
     const fetchUserData = async () => {
-      if (user) {
+      // Reset phone when user changes
+      setUserPhone(null);
+      setUserData(null);
+      
+      if (user && db) {
         try {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
@@ -231,19 +244,22 @@ export default function Home() {
           }
 
           // Persistence Logic: Update Firestore on Approval
-          if (msg.decision === 'approved' && user) {
+          if (msg.decision === 'approved' && user && db) {
             const amount = msg.amount || payload.requested_amount || 150000;
             const emi = msg.emi || 0;
+            
+            // Accumulate loan amounts instead of overwriting
             setDoc(doc(db, 'users', user.uid), {
               loanStatus: 'Active',
               currentLoanAmount: amount,
+              totalLoanAmount: (userData?.totalLoanAmount || 0) + amount,
               monthlyEMI: emi,
               lastUpdated: new Date().toISOString()
             }, { merge: true });
           }
 
           // Sanction Letter Persistence
-          if (msg.download_url && user) {
+          if (msg.download_url && user && db) {
             setDoc(doc(db, 'users', user.uid), {
               sanctionLetterUrl: msg.download_url
             }, { merge: true });
@@ -317,6 +333,28 @@ export default function Home() {
       sendTextMessage();
     }
   };
+
+  // Show loading state while checking authentication
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <div style={{ textAlign: 'center' }}>
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render if not authenticated - show loading while redirecting to login
+  if (!user) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <div style={{ textAlign: 'center' }}>
+          <p>Redirecting to login...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container">

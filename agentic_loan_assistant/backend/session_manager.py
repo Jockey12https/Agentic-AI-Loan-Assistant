@@ -12,6 +12,8 @@ class ConversationSession:
         self.created_at = datetime.now()
         self.last_activity = datetime.now()
         self.context: Dict = {}
+        self.context["total_loan_amount"] = 0  # Track accumulated loan amount
+        self.context["loan_history"] = []  # Track individual loan applications
         
     def add_message(self, role: str, content: str, metadata: Optional[Dict] = None):
         """Add a message to the conversation history"""
@@ -38,7 +40,9 @@ class ConversationSession:
         summary_parts.append(f"Total messages: {len(self.messages)}")
         
         # Extract key information from context
-        if self.context.get("requested_amount"):
+        if self.context.get("total_loan_amount"):
+            summary_parts.append(f"Total loan amount: INR {self.context['total_loan_amount']:,}")
+        elif self.context.get("requested_amount"):
             summary_parts.append(f"Requested loan amount: INR {self.context['requested_amount']:,}")
         if self.context.get("last_intent"):
             summary_parts.append(f"Last intent: {self.context['last_intent']}")

@@ -129,6 +129,7 @@ async def master_chat(req: ChatRequest):
     
     # Update session context
     session.update_context("last_intent", intent)
+    session.update_context("customer_name", customer.get("name", "Valued Customer"))
     if req.requested_amount:
         session.update_context("requested_amount", req.requested_amount)
     
@@ -239,6 +240,8 @@ async def master_chat(req: ChatRequest):
         
         # Update session with decision
         session.update_context("last_decision", uw_result["decision"])
+        session.update_context("requested_amount", req.requested_amount)
+        session.update_context("tenure_months", req.tenure_months or 60)
         session.update_context("emi", uw_result.get("emi"))
         session.update_context("credit_score", uw_result.get("credit_score"))
         
@@ -488,12 +491,42 @@ async def upload_salary_slip(customer_id: str, file: UploadFile = File(...)):
 
 @app.get("/sanction/{customer_id}")
 async def sanction_letter(customer_id: str):
-    if customer_id not in CUSTOMERS:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    # generate sample pdf
+    # Get customer from mock data or create from session
+    customer = CUSTOMERS.get(customer_id)
+    
+    # Get session data for loan details
+    from . import session_manager as sm
+    session_mgr = sm.get_session_manager()
+    session = session_mgr.get_or_create_session(customer_id)
+    
+    # If customer not in mock data, build from session context
+    if not customer:
+        customer = {
+            "id": customer_id,
+            "name": session.context.get("customer_name", "Valued Customer"),
+            "pre_approved_limit": session.context.get("pre_approved_limit", 150000)
+        }
+    
+    # Get loan details from session
+    loan_amount = session.context.get("requested_amount", 0)
+    emi = session.context.get("emi", 0)
+    tenure_months = session.context.get("tenure_months", 60)
+    credit_score = session.context.get("credit_score", 720)
+    
+    # Generate pdf with actual loan details
     pdf_path = os.path.join(os.path.dirname(__file__), "..", "outputs", f"sanction_{customer_id}.pdf")
     os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
-    utils.generate_sample_sanction_pdf(CUSTOMERS[customer_id], pdf_path)
+    
+    # Create enhanced customer dict with loan details
+    customer_with_loan = customer.copy()
+    customer_with_loan.update({
+        "loan_amount": loan_amount,
+        "emi": emi,
+        "tenure_months": tenure_months,
+        "credit_score": credit_score
+    })
+    
+    utils.generate_sample_sanction_pdf(customer_with_loan, pdf_path)
     return FileResponse(pdf_path, media_type='application/pdf', filename=os.path.basename(pdf_path))
 
 @app.post("/auth/generate-otp")
