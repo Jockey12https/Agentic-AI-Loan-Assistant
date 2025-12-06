@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import CreditScoreGauge from '../components/CreditScoreGauge';
 import LoanCalculator from '../components/LoanCalculator';
@@ -35,6 +35,8 @@ export default function Home() {
   const [userPhone, setUserPhone] = useState<string | null>(null);
   const [userData, setUserData] = useState<any>(null);
   const [currentMood, setCurrentMood] = useState<'happy' | 'frustrated' | 'anxious' | 'confused' | 'neutral'>('neutral');
+  const [showUpload, setShowUpload] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const chatLogRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
 
@@ -171,9 +173,30 @@ export default function Home() {
     };
 
     // Detect amount in text
-    const amountMatch = text.match(/(\d+(,\d{3})*(\.\d+)?)/);
-    if (amountMatch) {
-      payload.requested_amount = parseInt(amountMatch[0].replace(/,/g, ''));
+    let reqAmount = null;
+    const lowerText = text.toLowerCase().replace(/,/g, ''); // Remove commas for easier parsing
+
+    // Check for "Lakh" (e.g., 2.5 lakh, 10 lakhs)
+    const lakhMatch = lowerText.match(/(\d+(\.\d+)?)\s*lakhs?/);
+    if (lakhMatch) {
+      reqAmount = parseFloat(lakhMatch[1]) * 100000;
+    }
+    // Check for "k" (e.g., 50k)
+    else if (lowerText.match(/(\d+(\.\d+)?)\s*k/)) {
+      const kMatch = lowerText.match(/(\d+(\.\d+)?)\s*k/);
+      if (kMatch) reqAmount = parseFloat(kMatch[1]) * 1000;
+    }
+    // Check for raw numbers (e.g., 200000) - avoiding small numbers like "2" or "3" unless context implies
+    else {
+      const numMatch = text.match(/(\d+(\.\d+)?)/);
+      if (numMatch) {
+        const val = parseFloat(numMatch[0].replace(/,/g, ''));
+        if (val > 1000) reqAmount = val; // Only treat as amount if > 1000 to avoid capturing "2 years"
+      }
+    }
+
+    if (reqAmount) {
+      payload.requested_amount = reqAmount;
       payload.tenure_months = 60;
     }
 
@@ -206,6 +229,30 @@ export default function Home() {
           if (msg.credit_score) {
             setCreditScore(msg.credit_score);
           }
+
+          // Persistence Logic: Update Firestore on Approval
+          if (msg.decision === 'approved' && user) {
+            const amount = msg.amount || payload.requested_amount || 150000;
+            const emi = msg.emi || 0;
+            setDoc(doc(db, 'users', user.uid), {
+              loanStatus: 'Active',
+              currentLoanAmount: amount,
+              monthlyEMI: emi,
+              lastUpdated: new Date().toISOString()
+            }, { merge: true });
+          }
+
+          // Sanction Letter Persistence
+          if (msg.download_url && user) {
+            setDoc(doc(db, 'users', user.uid), {
+              sanctionLetterUrl: msg.download_url
+            }, { merge: true });
+          }
+
+          // File Upload Trigger
+          if (msg.action_required === 'upload_salary_slip') {
+            setShowUpload(true);
+          }
         });
       }
 
@@ -214,6 +261,36 @@ export default function Home() {
       setIsTyping(false);
       addMessage('error', `Network error: ${e.toString()}`);
       setError('Failed to connect to backend. Make sure the server is running on http://localhost:8000');
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    setIsUploading(true);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch(`http://localhost:8000/upload/salary-slip?customer_id=${customerId}`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        setShowUpload(false);
+        addMessage('user', `[Uploaded ${file.name}]`);
+        // Notify backend that upload is done
+        sendMessageToBackend("I have uploaded the salary slip.");
+      } else {
+        alert('Upload failed');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Upload error');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -254,6 +331,41 @@ export default function Home() {
       </div>
 
       <div className="content">
+        {showUpload && (
+          <div className="glass-card" style={{
+            position: 'fixed',
+            bottom: '80px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: '90%',
+            maxWidth: '500px',
+            zIndex: 1000,
+            background: 'rgba(20, 20, 20, 0.95)',
+            border: '2px solid #fbbf24',
+            padding: '1.5rem',
+            borderRadius: '16px',
+            boxShadow: '0 -10px 30px rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(10px)'
+          }}>
+            <h3 style={{ color: '#fbbf24', marginBottom: '1rem' }}>📄 Document Upload Required</h3>
+            <p style={{ color: 'rgba(255,255,255,0.8)', marginBottom: '1rem' }}>Please upload your <strong>Salary Slip</strong> (PDF containing "Salary") to proceed.</p>
+            <input
+              type="file"
+              onChange={handleFileUpload}
+              disabled={isUploading}
+              accept=".pdf,.jpg,.png"
+              style={{ color: 'white', width: '100%', marginBottom: '0.5rem' }}
+            />
+            {isUploading && <p style={{ color: '#fbbf24' }}>Uploading & Verifying...</p>}
+            <button
+              onClick={() => setShowUpload(false)}
+              style={{ marginTop: '1rem', width: '100%', padding: '0.8rem', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
         {error && (
           <div className={`status ${error.includes('error') ? 'error' : 'info'}`}>
             {error}

@@ -18,6 +18,10 @@ interface UserData {
   address?: string;
   panNumber?: string;
   aadharNumber?: string;
+  currentLoanAmount?: number;
+  monthlyEMI?: number;
+  loanStatus?: string;
+  sanctionLetterUrl?: string;
 }
 
 export default function DashboardPage() {
@@ -127,9 +131,9 @@ export default function DashboardPage() {
 
         {/* Stats */}
         <div className="stats-grid">
-          <div className="stat-card"><div className="stat-icon">💰</div><div><p>Total Loans</p><h3>₹1,50,000</h3></div></div>
-          <div className="stat-card"><div className="stat-icon">📊</div><div><p>Active Loans</p><h3>2</h3></div></div>
-          <div className="stat-card"><div className="stat-icon">💳</div><div><p>Monthly EMI</p><h3>₹3,870</h3></div></div>
+          <div className="stat-card"><div className="stat-icon">💰</div><div><p>Loan Amount</p><h3>₹{userData?.currentLoanAmount ? userData.currentLoanAmount.toLocaleString('en-IN') : '0'}</h3></div></div>
+          <div className="stat-card"><div className="stat-icon">📊</div><div><p>Status</p><h3>{userData?.loanStatus || 'Inactive'}</h3></div></div>
+          <div className="stat-card"><div className="stat-icon">💳</div><div><p>Monthly EMI</p><h3>₹{userData?.monthlyEMI ? userData.monthlyEMI.toLocaleString('en-IN') : '0'}</h3></div></div>
           <div className="stat-card"><div className="stat-icon">✅</div><div><p>KYC Status</p><h3>{userData?.kycStatus || 'Pending'}</h3></div></div>
         </div>
 
@@ -144,7 +148,9 @@ export default function DashboardPage() {
             <h2>Quick Actions</h2>
             <div className="actions-grid">
               <Link href={`/?customerId=${userData?.customerId || ''}`} className="action-btn"><span>💬</span><span>Apply Loan</span></Link>
-              <button className="action-btn"><span>📄</span><span>Documents</span></button>
+              {userData?.sanctionLetterUrl && (
+                <a href={`http://localhost:8000${userData.sanctionLetterUrl}`} target="_blank" className="action-btn"><span>📜</span><span>Sanction Letter</span></a>
+              )}
               <button className="action-btn"><span>💰</span><span>Payment</span></button>
               <button className="action-btn"><span>📞</span><span>Support</span></button>
             </div>

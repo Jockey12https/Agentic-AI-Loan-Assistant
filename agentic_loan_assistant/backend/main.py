@@ -16,11 +16,18 @@ app = FastAPI(title="Agentic Loan Assistant - Mock Backend")
 # Add CORS middleware to allow frontend to access the API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
-    allow_credentials=False,
+    allow_origins=["http://localhost:8080", "http://localhost:3000", "http://127.0.0.1:8080", "http://127.0.0.1:3000"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+try:
+    import pypdf
+    PYPDF_AVAILABLE = True
+except ImportError:
+    PYPDF_AVAILABLE = False
+    print("Warning: pypdf not installed. PDF verification will be skipped.")
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "customers.json")
 with open(DATA_PATH) as f:
@@ -83,6 +90,10 @@ async def master_chat(req: ChatRequest):
     session_mgr = sm.get_session_manager()
     session = session_mgr.get_or_create_session(req.customer_id)
     
+    # Restore persistence: If amount is missing in current execution, check session history
+    if not req.requested_amount:
+        req.requested_amount = session.context.get("requested_amount")
+    
     # Add user message to session
     session.add_message("user", req.message)
     
@@ -93,6 +104,11 @@ async def master_chat(req: ChatRequest):
     
     # Get customer data
     offer = utils.get_offermart(customer["id"])
+    
+    # If offer is 0 (user not in mock DB), use the default from customer object
+    if offer.get("pre_approved_limit", 0) == 0:
+        offer["pre_approved_limit"] = customer.get("pre_approved_limit", 150000)
+
     kyc = utils.get_crm(customer["id"])
     
     # If KYC data is missing (e.g. for Firebase users), use customer data
@@ -213,7 +229,8 @@ async def master_chat(req: ChatRequest):
             "text": underwriting_text,
             "decision": uw_result["decision"],
             "emi": uw_result.get("emi"),
-            "credit_score": uw_result.get("credit_score")
+            "credit_score": uw_result.get("credit_score"),
+            "amount": req.requested_amount
         })
         session.add_message("underwriting", underwriting_text, {
             "decision": uw_result["decision"],
@@ -227,14 +244,30 @@ async def master_chat(req: ChatRequest):
         
         # EDGE CASE 1: Salary slip required
         if uw_result.get("requires_salary_slip"):
-            activated_agents.append("document_upload")
-            salary_slip_text = "📄 Please upload your latest salary slip to complete the verification. You can upload it using the document upload feature."
-            response["messages"].append({
-                "agent": "system",
-                "text": salary_slip_text,
-                "action_required": "upload_salary_slip"
-            })
-            session.add_message("system", salary_slip_text)
+            # CHECK VERIFICATION STATUS
+            is_verified = session.context.get("salary_slip_verified", False)
+
+            if is_verified:
+                 activated_agents.append("sanction_letter")
+                 sanction_text = f"✅ Document Verified! Sanction letter generated."
+                 response["messages"].append({
+                     "agent": "sanction_letter",
+                     "text": sanction_text,
+                     "download_url": f"/sanction/{customer['id']}",
+                     "decision": "approved",
+                     "amount": req.requested_amount,
+                     "emi": uw_result.get("emi")
+                 })
+                 session.add_message("sanction_letter", sanction_text)
+            else:
+                activated_agents.append("document_upload")
+                salary_slip_text = "📄 Please upload your latest salary slip to complete the verification. You can upload it using the document upload feature."
+                response["messages"].append({
+                    "agent": "system",
+                    "text": salary_slip_text,
+                    "action_required": "upload_salary_slip"
+                })
+                session.add_message("system", salary_slip_text)
         
         # EDGE CASE 2: Loan approved - Generate sanction letter
         elif uw_result["decision"] == "approved":
@@ -391,13 +424,67 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @app.post("/upload/salary-slip")
 async def upload_salary_slip(customer_id: str, file: UploadFile = File(...)):
-    # Save file locally as a simulation
+    # Save file locally
     filename = f"{customer_id}_{uuid.uuid4().hex}_{file.filename}"
     path = os.path.join(UPLOAD_DIR, filename)
+    
+    content = await file.read()
     with open(path, "wb") as f:
-        f.write(await file.read())
-    # fake re-eval: call underwriter to re-check using a mocked salary (read from filename?)
-    return {"status": "uploaded", "path": path}
+        f.write(content)
+
+    # VERIFICATION LOGIC
+    is_valid = False
+    reason = "Could not verify document content."
+    
+    is_valid = False
+    reason = "Could not verify document content."
+    
+    try:
+        if filename.lower().endswith('.pdf'):
+            if PYPDF_AVAILABLE:
+                try:
+                    reader = pypdf.PdfReader(path)
+                    text = ""
+                    for page in reader.pages:
+                        text += page.extract_text().lower()
+                    
+                    keywords = ["salary", "payslip", "pay slip", "earnings", "net pay", "deductions", "govt", "private", "ltd"]
+                    if any(k in text for k in keywords):
+                        is_valid = True
+                        reason = "Verified: Valid Salary Slip detected."
+                    else:
+                        is_valid = False
+                        reason = "Document verification failed: No 'Salary' or 'Payslip' keywords found. Please upload a valid Salary Slip."
+                except Exception as e:
+                    print(f"PDF Read Error: {e}")
+                    is_valid = False
+                    reason = "Unreadable PDF file."
+            else:
+                 is_valid = True
+                 reason = "PDF uploaded (Verification skipped - pypdf missing)."
+        
+        elif filename.lower().endswith(('.jpg', '.png', '.jpeg')):
+             is_valid = True 
+             reason = "Image uploaded (OCR Pending). Proceeding."
+        else:
+             reason = "Invalid file format. Please upload PDF or Image."
+
+    except Exception as e:
+        print(f"Verification Error: {e}")
+        reason = f"Error processing file: {str(e)}"
+        is_valid = False
+
+    # Update Session Context (Persistent for Firebase users)
+    from . import session_manager as sm
+    session_mgr = sm.get_session_manager()
+    session = session_mgr.get_or_create_session(customer_id)
+    session.update_context("salary_slip_verified", is_valid)
+    
+    # Update CUSTOMERS only if they already exist (Mock users)
+    if customer_id in CUSTOMERS:
+        CUSTOMERS[customer_id]["salary_slip_verified"] = is_valid
+
+    return {"status": "uploaded", "verified": is_valid, "message": reason, "path": path}
 
 @app.get("/sanction/{customer_id}")
 async def sanction_letter(customer_id: str):
