@@ -99,7 +99,7 @@ export default function Home() {
       // Reset phone when user changes
       setUserPhone(null);
       setUserData(null);
-      
+
       if (user && db) {
         try {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
@@ -247,7 +247,7 @@ export default function Home() {
           if (msg.decision === 'approved' && user && db) {
             const amount = msg.amount || payload.requested_amount || 150000;
             const emi = msg.emi || 0;
-            
+
             // Accumulate loan amounts instead of overwriting
             setDoc(doc(db, 'users', user.uid), {
               loanStatus: 'Active',
@@ -359,6 +359,13 @@ export default function Home() {
   return (
     <div className="container">
       <div className="header">
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="back-button"
+          title="Back to Dashboard"
+        >
+          ← Back to Dashboard
+        </button>
         <h1>🤖 LoanBot AI Assistant</h1>
         <p>Your intelligent loan companion powered by advanced AI</p>
         {currentMood !== 'neutral' && (

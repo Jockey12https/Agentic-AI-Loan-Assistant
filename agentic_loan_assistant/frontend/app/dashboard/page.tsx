@@ -152,8 +152,8 @@ export default function DashboardPage() {
               {userData?.sanctionLetterUrl && (
                 <button onClick={() => window.open(`http://localhost:8000${userData.sanctionLetterUrl}`, '_blank')} className="action-btn"><span>📜</span><span>Sanction Letter</span></button>
               )}
-              <button className="action-btn"><span>💰</span><span>Payment</span></button>
-              <button className="action-btn"><span>📞</span><span>Support</span></button>
+              <button onClick={() => router.push('/payment')} className="action-btn"><span>💰</span><span>Payment</span></button>
+              <button onClick={() => window.open('mailto:support@loanassistant.com?subject=Support Request&body=Customer ID: ' + (userData?.customerId || ''))} className="action-btn"><span>📞</span><span>Support</span></button>
             </div>
           </div>
         </div>

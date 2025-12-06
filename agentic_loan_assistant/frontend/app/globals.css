@@ -151,6 +151,35 @@ body::before {
   font-weight: 400;
 }
 
+/* Back Button */
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  margin-bottom: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  text-decoration: none;
+}
+
+.back-button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: var(--border-glow);
+  transform: translateX(-4px);
+  box-shadow: var(--shadow-md);
+}
+
+.back-button:active {
+  transform: translateX(-2px);
+}
+
 /* Content Area */
 .content {
   flex: 1;
