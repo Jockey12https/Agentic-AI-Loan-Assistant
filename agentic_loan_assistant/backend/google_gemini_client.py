@@ -1,6 +1,11 @@
 # google_gemini_client.py - Official Google Gemini API integration
+# Trigger reload
+# Trigger reload for new API key
 import os
 from typing import List, Dict, Optional
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
 
 try:
     import google.generativeai as genai
@@ -20,28 +25,57 @@ class GoogleGeminiClient:
             try:
                 genai.configure(api_key=self.api_key)
                 
-                # Try models in order of preference
-                model_names = [
-                    'gemini-2.0-flash-exp',  # Latest experimental model
-                    'gemini-1.5-flash',       # Stable fast model
-                    'gemini-1.5-pro',         # More capable model
-                    'gemini-pro',             # Legacy model
+                # Dynamically find available models
+                available_models = []
+                try:
+                    for m in genai.list_models():
+                        if 'generateContent' in m.supported_generation_methods:
+                            available_models.append(m.name)
+                except Exception as e:
+                    print(f"Error listing models: {e}")
+
+                print(f"Available Gemini models: {available_models}")
+
+                # Preference list - Prioritize stable models to avoid 429s from experimental quotas
+                # Preference list - Prioritize stable models
+                preferences = [
+                    'gemini-flash-latest',
+                    'gemini-2.0-flash',
+                    'gemini-1.5-flash',
+                    'gemini-1.5-pro',
+                    'gemini-pro'
                 ]
                 
-                for model_name in model_names:
-                    try:
-                        self.model = genai.GenerativeModel(model_name)
-                        # Test if model works
-                        test_response = self.model.generate_content("Hi")
-                        if test_response:
-                            print(f"✓ Google Gemini API ({model_name}) initialized successfully!")
-                            break
-                    except Exception as e:
-                        print(f"  Model {model_name} not available: {str(e)[:50]}")
-                        continue
+                selected_model_name = None
                 
-                if not self.model:
-                    print("❌ No Gemini models available with this API key")
+                # Strict selection logic
+                for pref in preferences:
+                    # 1. Exact match (handle 'models/' prefix)
+                    exact = [m for m in available_models if m == pref or m == f"models/{pref}"]
+                    if exact:
+                        selected_model_name = exact[0]
+                        break
+                        
+                    # 2. Substring match but EXCLUDE experimental if not requested
+                    candidates = [m for m in available_models if pref in m]
+                    if 'exp' not in pref:
+                        candidates = [m for m in candidates if 'exp' not in m]
+                    
+                    if candidates:
+                        selected_model_name = candidates[0]
+                        break
+                
+                # Fallback to first available if no preference met
+                if not selected_model_name and available_models:
+                    selected_model_name = available_models[0]
+                
+                if selected_model_name:
+                    print(f"Selected Gemini model: {selected_model_name}")
+                    self.model = genai.GenerativeModel(selected_model_name)
+                else:
+                    print("❌ No suitable Gemini models found. Using default fallback.")
+                    # Last ditch effort
+                    self.model = genai.GenerativeModel('gemini-pro')
                     
             except Exception as e:
                 print(f"Error initializing Gemini: {e}")

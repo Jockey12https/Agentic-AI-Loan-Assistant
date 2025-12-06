@@ -1,6 +1,8 @@
 # List available Gemini models
 import os
-os.environ["GOOGLE_GEMINI_API_KEY"] = "AIzaSyDZqS4186G3uvuL4wIzQhIkx-hKeJkvfdw"
+from dotenv import load_dotenv
+
+load_dotenv()
 
 try:
     import google.generativeai as genai

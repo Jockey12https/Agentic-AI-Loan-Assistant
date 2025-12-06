@@ -4,3 +4,6 @@ pydantic
 reportlab
 python-multipart
 openai
+firebase-admin
+google-generativeai
+python-dotenv

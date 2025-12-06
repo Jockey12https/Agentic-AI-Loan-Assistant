@@ -332,7 +332,7 @@ body::before {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
-  min-height: 500px;
+  min-height: 400px;
   max-height: 600px;
   overflow-y: auto;
   backdrop-filter: blur(20px);
@@ -340,6 +340,14 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
+}
+
+/* Chat Input Container - Sticky at bottom */
+.chat-input-container {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  margin-top: auto;
 }
 
 /* Custom Scrollbar */

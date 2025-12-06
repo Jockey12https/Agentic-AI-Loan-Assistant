@@ -3,6 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 import json, uuid, os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv(override=True)
 
 from . import underwriter, utils, auth, llm_orchestrator
 from fastapi.responses import FileResponse
@@ -27,6 +31,7 @@ class ChatRequest(BaseModel):
     message: str
     requested_amount: Optional[int] = None
     tenure_months: Optional[int] = None
+    user_data: Optional[dict] = None
 
 # Intent detection is now handled by LLM orchestrator
 
@@ -37,8 +42,41 @@ async def master_chat(req: ChatRequest):
     Coordinates with Worker Agents: Sales, Verification, Underwriting, Sanction Letter
     """
     customer = CUSTOMERS.get(req.customer_id)
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # If customer not in mock data, use provided user_data from frontend
+    if not customer and req.user_data:
+        customer = {
+            "id": req.customer_id,
+            "name": req.user_data.get("name", "User"),
+            "age": 25,
+            "city": "India",
+            "credit_score": 720,
+            "pre_approved_limit": 150000,
+            "current_loans": 0,
+            "phone": req.user_data.get("phone", "+91-0000000000"),
+            "pan": req.user_data.get("panNumber", "XXXXX0000X")
+        }
+    elif not customer:
+        # Fallback to Firestore if user_data not provided (backward compatibility)
+        try:
+            from .firebase_config import get_user_by_customer_id
+            user_data = get_user_by_customer_id(req.customer_id)
+            if user_data:
+                customer = {
+                    "id": req.customer_id,
+                    "name": user_data.get("name", "User"),
+                    "age": 25,
+                    "city": "India",
+                    "credit_score": 720,
+                    "pre_approved_limit": 150000,
+                    "current_loans": 0,
+                    "phone": user_data.get("phone", "+91-0000000000"),
+                    "pan": user_data.get("panNumber", "XXXXX0000X")
+                }
+            else:
+                raise HTTPException(status_code=404, detail="Customer not found")
+        except Exception:
+             raise HTTPException(status_code=404, detail="Customer not found")
     
     # Get or create session for this customer
     from . import session_manager as sm
@@ -57,6 +95,10 @@ async def master_chat(req: ChatRequest):
     offer = utils.get_offermart(customer["id"])
     kyc = utils.get_crm(customer["id"])
     
+    # If KYC data is missing (e.g. for Firebase users), use customer data
+    if not kyc and customer:
+        kyc = customer.copy()
+
     # MASTER AGENT DECISION: Detect intent with conversation context
     customer_context = {
         "name": customer.get("name"),
@@ -369,33 +411,92 @@ async def sanction_letter(customer_id: str):
 
 @app.post("/auth/generate-otp")
 async def api_generate_otp(customer_id: str):
+    # Try to get customer from mock data first
     cust = CUSTOMERS.get(customer_id)
+    
+    # If not found, try to fetch from Firestore (for Firebase users)
     if not cust:
-        raise HTTPException(status_code=404, detail="Customer not found")
+        try:
+            # Import Firebase Admin SDK (you'll need to set this up)
+            # For now, use a default phone based on customer ID
+            phone_suffix = ''.join(filter(str.isdigit, customer_id))[-4:] or "0000"
+            phone = f"+91-98765-{phone_suffix}"
+            cust = {"phone": phone, "name": "User"}
+            
+            # TODO: Fetch actual phone from Firestore when Firebase Admin SDK is set up
+            # from firebase_admin import firestore
+            # db = firestore.client()
+            # user_doc = db.collection('users').where('customerId', '==', customer_id).limit(1).get()
+            # if user_doc:
+            #     user_data = user_doc[0].to_dict()
+            #     phone = user_data.get('phone', phone)
+        except Exception as e:
+            # Fallback to generated phone
+            phone_suffix = ''.join(filter(str.isdigit, customer_id))[-4:] or "0000"
+            phone = f"+91-98765-{phone_suffix}"
+            cust = {"phone": phone, "name": "User"}
+    
     otp = auth.generate_otp(cust["phone"])
     return {"phone": cust["phone"], "otp": otp, "note": "OTP returned for demo (do not do in production)."}
 
 @app.post("/auth/verify-otp")
 async def api_verify_otp(customer_id: str, otp: str):
+    # Try to get customer from mock data
     cust = CUSTOMERS.get(customer_id)
+    
+    # If not found, create a default entry for Firebase users
     if not cust:
-        raise HTTPException(status_code=404, detail="Customer not found")
+        phone_suffix = ''.join(filter(str.isdigit, customer_id))[-4:] or "0000"
+        phone = f"+91-98765-{phone_suffix}"
+        cust = {"phone": phone}
+    
     ok, msg = auth.verify_otp(cust["phone"], otp)
     return {"verified": ok, "message": msg}
 
 @app.post("/auth/enroll-voice")
-async def enroll_voice(customer_id: str, sample_text: str):
+async def enroll_voice(customer_id: str, audio: UploadFile = File(...)):
+    """Enroll voice biometric with audio file"""
     if customer_id not in CUSTOMERS:
         raise HTTPException(status_code=404, detail="Customer not found")
-    ok = auth.enroll_voice(customer_id, sample_text)
-    return {"enrolled": ok}
+    
+    # Read audio data
+    audio_data = await audio.read()
+    
+    # Validate file size (max 5MB)
+    if len(audio_data) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Audio file too large (max 5MB)")
+    
+    # Enroll voice
+    success, message = auth.enroll_voice(customer_id, audio_data)
+    
+    return {
+        "enrolled": success,
+        "message": message,
+        "customer_id": customer_id
+    }
 
 @app.post("/auth/verify-voice")
-async def verify_voice(customer_id: str, sample_text: str):
+async def verify_voice(customer_id: str, audio: UploadFile = File(...)):
+    """Verify voice biometric with audio file"""
     if customer_id not in CUSTOMERS:
         raise HTTPException(status_code=404, detail="Customer not found")
-    ok, msg = auth.verify_voice(customer_id, sample_text)
-    return {"verified": ok, "message": msg}
+    
+    # Read audio data
+    audio_data = await audio.read()
+    
+    # Validate file size (max 5MB)
+    if len(audio_data) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Audio file too large (max 5MB)")
+    
+    # Verify voice
+    verified, message, confidence = auth.verify_voice(customer_id, audio_data)
+    
+    return {
+        "verified": verified,
+        "message": message,
+        "confidence": f"{confidence:.1f}%",
+        "customer_id": customer_id
+    }
 
 @app.post("/master/llm-assist")
 async def master_llm_assist(customer_id: str, prompt: str):

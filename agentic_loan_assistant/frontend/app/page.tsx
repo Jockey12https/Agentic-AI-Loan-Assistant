@@ -1,10 +1,14 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../config/firebase';
 import CreditScoreGauge from '../components/CreditScoreGauge';
 import LoanCalculator from '../components/LoanCalculator';
 import MoodIndicator from '../components/MoodIndicator';
 import VoiceAuth from '../components/VoiceAuth';
+import OTPVerification from '../components/OTPVerification';
 
 interface Message {
   role: string;
@@ -27,8 +31,23 @@ export default function Home() {
   const [creditScore, setCreditScore] = useState<number | null>(null);
   const [showCalculator, setShowCalculator] = useState(true);
   const [showVoiceAuth, setShowVoiceAuth] = useState(false);
+  const [isOTPVerified, setIsOTPVerified] = useState(false);
+  const [userPhone, setUserPhone] = useState<string | null>(null);
+  const [userData, setUserData] = useState<any>(null);
   const [currentMood, setCurrentMood] = useState<'happy' | 'frustrated' | 'anxious' | 'confused' | 'neutral'>('neutral');
   const chatLogRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
+
+  // Read customer ID from URL parameter (from dashboard)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlCustomerId = params.get('customerId');
+      if (urlCustomerId) {
+        setCustomerId(urlCustomerId);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     // Initialize Web Speech API
@@ -62,6 +81,25 @@ export default function Home() {
       }
     }
   }, []);
+
+  // Fetch user data from Firebase
+  useEffect(() => {
+    const fetchUserData = async () => {
+      if (user) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            setUserData(data);
+            setUserPhone(data.phone || null);
+          }
+        } catch (error) {
+          console.error('Error fetching user data:', error);
+        }
+      }
+    };
+    fetchUserData();
+  }, [user]);
 
   useEffect(() => {
     // Auto-scroll to bottom when new messages arrive
@@ -129,6 +167,7 @@ export default function Home() {
     const payload: any = {
       customer_id: customerId || 'cust001',
       message: text,
+      user_data: userData,
     };
 
     // Detect amount in text
@@ -229,10 +268,42 @@ export default function Home() {
               type="text"
               value={customerId}
               onChange={(e) => setCustomerId(e.target.value)}
-              placeholder="Enter customer ID (e.g., cust004)"
+              placeholder={customerId ? customerId : "Enter customer ID"}
+              readOnly={!!customerId}
+
             />
           </div>
         </div>
+
+        {/* OTP Verification - Required before chat */}
+        {!isOTPVerified && (
+          <div className="glass-card" style={{ border: '2px solid rgba(59, 130, 246, 0.5)' }}>
+            <div style={{ marginBottom: '1rem', textAlign: 'center' }}>
+              <h3 style={{ color: '#60a5fa', fontSize: '1.1rem', marginBottom: '0.5rem' }}>🔐 Authentication Required</h3>
+              <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.9rem' }}>Please verify your identity to access the chat</p>
+            </div>
+            {userPhone ? (
+              <OTPVerification
+                customerId={customerId}
+                phoneNumber={userPhone}
+                onVerified={() => {
+                  setIsOTPVerified(true);
+                }}
+              />
+            ) : (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255, 255, 255, 0.7)' }}>
+                <p>⚠️ Phone number not found</p>
+                <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>Please complete your KYC in the dashboard to add your phone number</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {isOTPVerified && (
+          <div className="glass-card" style={{ border: '2px solid rgba(16, 185, 129, 0.5)', padding: '1rem', textAlign: 'center' }}>
+            <span style={{ color: '#10b981', fontSize: '1rem', fontWeight: 600 }}>✅ Verified - You can now chat!</span>
+          </div>
+        )}
 
         {/* Enhanced Features Section */}
         <div className="features-grid">
@@ -256,7 +327,7 @@ export default function Home() {
             onClick={() => setShowVoiceAuth(!showVoiceAuth)}
             style={{ width: '100%' }}
           >
-            {showVoiceAuth ? '🔐 Hide Voice Auth' : '🔐 Setup Voice Authentication'}
+            {showVoiceAuth ? '� Hide Voice Auth' : '� Setup Voice Authentication'}
           </button>
         </div>
 
@@ -266,65 +337,16 @@ export default function Home() {
           </div>
         )}
 
-        <div className="glass-card">
-          <div className="controls">
-            <button
-              className="btn btn-primary"
-              onClick={startRecording}
-              disabled={isRecording || !recognition}
-            >
-              {isRecording ? (
-                <>
-                  <span className="recording-indicator"></span>
-                  <span>Recording...</span>
-                  <div className="voice-waveform">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  🎤 Start Voice
-                </>
-              )}
-            </button>
-            <button
-              className="btn btn-secondary"
-              onClick={stopRecording}
-              disabled={!isRecording}
-            >
-              ⏹️ Stop
-            </button>
-          </div>
-        </div>
-
-        <div className="glass-card">
-          <div className="text-input-group">
-            <input
-              type="text"
-              value={textInput}
-              onChange={(e) => setTextInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Type your message here... (e.g., 'I need a loan of 100000')"
-            />
-            <button
-              className="btn btn-primary"
-              onClick={sendTextMessage}
-              disabled={!textInput.trim()}
-            >
-              📤 Send
-            </button>
-          </div>
-        </div>
-
         <div className="chat-log" ref={chatLogRef}>
-          {messages.length === 0 ? (
+          {!isOTPVerified ? (
+            <div className="empty-state">
+              <div className="empty-state-icon">🔒</div>
+              <p style={{ fontSize: '1.1rem', fontWeight: 600, color: '#60a5fa' }}>Authentication Required</p>
+              <p style={{ fontSize: '0.9rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.6)' }}>
+                Please verify your OTP above to start chatting
+              </p>
+            </div>
+          ) : messages.length === 0 ? (
             <div className="empty-state">
               <div className="empty-state-icon">💬</div>
               <p>No messages yet. Start a conversation!</p>
@@ -375,6 +397,67 @@ export default function Home() {
               )}
             </>
           )}
+        </div>
+
+        {/* Input Controls - Fixed at Bottom */}
+        <div className="glass-card">
+          <div className="controls">
+            <button
+              className="btn btn-primary"
+              onClick={startRecording}
+              disabled={!isOTPVerified || isRecording || !recognition}
+              title={!isOTPVerified ? "Please verify OTP first" : ""}
+            >
+              {isRecording ? (
+                <>
+                  <span className="recording-indicator"></span>
+                  <span>Recording...</span>
+                  <div className="voice-waveform">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  🎤 Start Voice
+                </>
+              )}
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={stopRecording}
+              disabled={!isRecording}
+            >
+              ⏹️ Stop
+            </button>
+          </div>
+        </div>
+
+        <div className="glass-card chat-input-container">
+          <div className="text-input-group">
+            <input
+              type="text"
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder={isOTPVerified ? "Type your message here... (e.g., 'I need a loan of 100000')" : "Please verify OTP to start chatting..."}
+              disabled={!isOTPVerified}
+            />
+            <button
+              className="btn btn-primary"
+              onClick={sendTextMessage}
+              disabled={!isOTPVerified || !textInput.trim()}
+              title={!isOTPVerified ? "Please verify OTP first" : ""}
+            >
+              📤 Send
+            </button>
+          </div>
         </div>
       </div>
     </div>

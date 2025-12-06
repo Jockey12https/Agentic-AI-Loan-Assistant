@@ -1,1 +1,12 @@
-{}
+{
+  "cust004": {
+    "pattern": "3337e1774d12d145764d34fd425e3379_542",
+    "audio_file": "cust004_enrolled.webm",
+    "enrolled_at": 1765004970.143948
+  },
+  "cust003": {
+    "pattern": "718fda14a07b0682c60ed983c184e43c_542",
+    "audio_file": "cust003_enrolled.webm",
+    "enrolled_at": 1765004936.6102445
+  }
+}
